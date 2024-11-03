@@ -1,0 +1,89 @@
+from flask import Flask, render_template, request, redirect, url_for
+import pandas as pd
+import paypalrestsdk
+from config import PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET
+
+# Initialize Flask app
+app = Flask(__name__)
+
+# Sample data
+def generate_sample_data():
+    data = {
+        "ID": ["USER12345", "USER67890"],
+        "Name": ["Alice Johnson", "Bob Smith"],
+        "Shelter_Name": ["Hope Shelter", "Safe Haven"],
+        "Shelter_Account": ["shelter_acc_1", "shelter_acc_2"],
+        "Fund_Amount": [0.0, 0.0],
+        "Accommodation_Days": [0, 0]
+    }
+    return pd.DataFrame(data)
+
+# Initialize data
+homeless_data = generate_sample_data()
+
+# Donation function with PayPal integration
+def make_donation(id_name, amount):
+    if id_name in homeless_data['ID'].values:
+        shelter_account = homeless_data.loc[homeless_data['ID'] == id_name, 'Shelter_Account'].values[0]
+        
+        payment = paypalrestsdk.Payment({
+            "intent": "sale",
+            "payer": {"payment_method": "paypal"},
+            "transactions": [{
+                "amount": {"total": f"{amount:.2f}", "currency": "USD"},
+                "payee": {"email": f"{shelter_account}@example.com"},
+                "description": f"Donation for {id_name} at {shelter_account}"}],
+            "redirect_urls": {
+                "return_url": "http://127.0.0.1:5000/payment/execute",
+                "cancel_url": "http://127.0.0.1:5000/payment/cancel"
+            }
+        })
+        
+        if payment.create():
+            for link in payment.links:
+                if link.rel == "approval_url":
+                    return link.href
+        else:
+            print(payment.error)
+    return None
+
+# Execute payment
+def execute_payment(payment_id, payer_id):
+    payment = paypalrestsdk.Payment.find(payment_id)
+    
+    if payment.execute({"payer_id": payer_id}):
+        amount = float(payment.transactions[0].amount.total)
+        id_name = payment.transactions[0].description.split()[2]
+        
+        cost_per_night = 10.0
+        days_covered = int(amount / cost_per_night)
+        
+        homeless_data.loc[homeless_data['ID'] == id_name, 'Fund_Amount'] += amount
+        homeless_data.loc[homeless_data['ID'] == id_name, 'Accommodation_Days'] += days_covered
+        
+        print(f"Updated Fund Amount and Accommodation Days for {id_name}")
+    else:
+        print(payment.error)
+
+@app.route("/")
+def index():
+    return render_template("index.html", data=homeless_data.to_dict(orient="records"))
+
+@app.route("/donate/<id_name>", methods=["GET", "POST"])
+def donate(id_name):
+    if request.method == "POST":
+        amount = float(request.form["amount"])
+        approval_url = make_donation(id_name, amount)
+        if approval_url:
+            return redirect(approval_url)
+    return render_template("donate.html", id_name=id_name)
+
+@app.route("/payment/execute")
+def execute_payment_route():
+    payment_id = request.args.get("paymentId")
+    payer_id = request.args.get("PayerID")
+    execute_payment(payment_id, payer_id)
+    return redirect(url_for("index"))
+
+if __name__ == "__main__":
+    app.run(debug=True)
