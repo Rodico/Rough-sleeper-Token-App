@@ -1,0 +1,36 @@
+#possible dashboard page?
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Shelter Fund Management</title>
+</head>
+<body>
+    <h1>Fund Status for Individuals</h1>
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Shelter</th>
+            <th>Fund Amount</th>
+            <th>Accommodation Days</th>
+            <th>Donate</th>
+        </tr>
+        {% for person in data %}
+        <tr>
+            <td>{{ person['ID'] }}</td>
+            <td>{{ person['Name'] }}</td>
+            <td>{{ person['Shelter_Name'] }}</td>
+            <td>${{ person['Fund_Amount'] }}</td>
+            <td>{{ person['Accommodation_Days'] }} days</td>
+            <td><a href="{{ url_for('donate', id_name=person['ID']) }}">Donate</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
+
+
+#Possible Donation Page???
+
